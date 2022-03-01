@@ -1,0 +1,5 @@
+@ViewChild('para') par : ElementRef;
+
+ngAfterViewInit(){
+	const parStream = fromEvent(this.par.nativeElement, 'click').subscribe(console.log)
+}
