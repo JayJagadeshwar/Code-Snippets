@@ -1,0 +1,246 @@
+Introduction
+--------------
+By default, Angular 2+ performs change detection on all components (from top to bottom) every time something changes in your app. A change can occur from a user event or data received from a network request.
+
+Change detection is very performant, but as an app gets more complex and the amount of components grows, change detection will have to perform more and more work.
+
+One solution is to use the OnPush change detection strategy for specific components. This will instruct Angular to run change detection on these components and their sub-tree only when new references are passed to them versus when data is mutated.
+
+In this article, you will learn about ChangeDetectionStrategy and ChangeDetectorRef.
+
+
+
+Exploring a ChangeDetectionStrategy Example
+-------------------------------------------
+Let’s examine a sample component with a child component that displays a list of aquatic creatures and allows users to add new creatures to the list:
+
+
+-------------------------------------------------------
+appcomponent.ts
+--------------------------------------------------------
+import { Component } from '@angular/core';
+
+@Component({
+  selector: 'app-root',
+  templateUrl: './app.component.html'
+})
+export class AppComponent {
+  aquaticCreatures = ['shark', 'dolphin', 'octopus'];
+
+  addAquaticCreature(newAquaticCreature) {
+    this.aquaticCreatures.push(newAquaticCreature);
+  }
+}
+------------------------------------------------------
+
+And the template will resemble:
+
+app.component.html
+-------------------------------------------------------------------------
+<input #inputAquaticCreature type="text" placeholder="Enter a new creature">
+<button (click)="addAquaticCreature(inputAquaticCreature.value)">Add creature</button>
+
+<app-child [data]="aquaticCreatures"></app-child>
+-------------------------------------------------------------------------
+
+The app-child component will resemble:
+
+child.component.ts
+------------------
+import { Component, Input } from '@angular/core';
+
+@Component({
+  selector: 'app-child',
+  templateUrl: './child.component.html'
+})
+export class ChildComponent {
+  @Input() data: string[];
+}
+----------------------------------------------
+And the app-child template will resemble:
+
+child.component.html
+------------------------
+<ul>
+  <li *ngFor="let item of data">{{ item }}</li>
+</ul>
+
+------------------------------------------------------------
+After compiling and visiting the application in a browser, you should observe an unordered list containing shark, dolphin, and octopus.
+
+Typing an aquatic creature to the input field and clicking the Add creature button will append the new creature to the list.
+
+The child component is updated when Angular detects the data has changed in the parent component.
+
+Now, let’s set the change detection strategy in the child component to OnPush:
+
+--------------------------------------------------------------------
+child.component.ts
+-------------------
+import { Component, Input, ChangeDetectionStrategy } from '@angular/core';
+
+@Component({
+  selector: 'app-child',
+  templateUrl: './child.component.html',
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class ChildComponent {
+  @Input() data: string[];
+}
+------------------------------------------------
+After recompiling and visiting the application in a browser, you should observe an unsorted list containing shark, dolphin, and octopus.
+
+However, adding a new aquatic creature does not seem to append it to the unordered list. The new data still gets pushed into the aquaticCreatures array in the parent component, but Angular does not recognize a new reference for the data input and therefore it does not run change detection on the component.
+
+To pass a new reference to the data input, you can replace Array.push with the spread syntax (...) in addAquaticCreature:
+---------------------------------------------
+app.component.ts
+-----------------
+// ...
+addAquaticCreature(newAquaticCreature) {
+  this.aquaticCreatures = [...this.aquaticCreatures, newAquaticCreature];
+}
+// ...
+---------------------------------------------
+With this variation, you are no longer mutating the aquaticCreatures array. You are returning a completely new array.
+
+After recompiling, you should observe that the application behaves as before. Angular detected a new reference to data, so it ran its change detection on the child component.
+
+This concludes modifying a sample parent and child component to use the OnPush change detection strategy.
+
+Exploring ChangeDetectorRef Examples
+When using a change detection strategy of OnPush, other than making sure to pass new references every time something should change, you can also make use of the ChangeDetectorRef for complete control.
+
+ChangeDetectorRef.detectChanges()
+You could for example keep mutating your data, and then have a button in the child component with a Refresh button.
+
+This will require reverting addAquaticCreature to use Array.push:
+-------------------------------------------------------------------
+app.component.ts
+-----------------
+// ...
+addAquaticCreature(newAquaticCreature) {
+  this.aquaticCreatures.push(newAquaticCreature);
+}
+// ...
+---------------------------------------------------
+And add a button element that triggers refresh():
+------------------------
+child.component.html
+--------------------
+<ul>
+  <li *ngFor="let item of data">{{ item }}</li>
+</ul>
+
+<button (click)="refresh()">Refresh</button>
+----------------------------------------------
+Then, modify the child component to use ChangeDetectorRef:
+--------------------
+child.component.ts
+----------------------
+import {
+  Component,
+  Input,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef
+} from '@angular/core';
+
+@Component({
+  selector: 'app-child',
+  templateUrl: './child.component.html',
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class ChildComponent {
+  @Input() data: string[];
+
+  constructor(private cd: ChangeDetectorRef) {}
+
+  refresh() {
+    this.cd.detectChanges();
+  }
+}
+-----------------------------------------------------------------------------
+After compiling and visiting the application in a browser, you should observe an unordered list containing shark, dolphin, and octopus.
+
+Adding new items to the array does not update the unordered list. However, pressing the Refresh button will run change detection on the component and an update will be performed.
+
+ChangeDetectorRef.markForCheck()
+Let’s say your data input is actually an observable.
+
+This example will use the RxJS BehaviorSubject:
+-------------------------------------------
+app.component.ts
+-----------------------------------
+import { Component } from '@angular/core';
+import { BehaviorSubject } from 'rxjs';
+
+@Component({ 
+  selector: 'app-root',
+  templateUrl: './app.component.html'
+})
+export class AppComponent {
+  aquaticCreatures = new BehaviorSubject(['shark', 'dolphin', 'octopus']);
+
+  addAcquaticCreature((newAquaticCreature) {
+    this.aquaticCreatures.next(newAquaticCreature);
+  }
+}
+---------------------------------------------------------
+And you subscribe to it in the OnInit hook in the child component.
+
+You will add the aquatic creatures to a aquaticCreatures array here:
+-------------------------------------------
+child.component.ts
+import {
+  Component,
+  Input,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  OnInit
+} from '@angular/core';
+import { Observable } from 'rxjs';
+
+@Component({
+  selector: 'app-child',
+  templateUrl: './child.component.html',
+  changeDetection: ChangeDetectionStrategy.OnPush
+})
+export class ChildComponent implements OnInit {
+  @Input() data: Observable<any>;
+  aquaticCreatures: string[] = [];
+
+  constructor(private cd: ChangeDetectorRef) {}
+
+  ngOnInit() {
+    <^>this.data.subscribe(newAquaticCreature => {
+      this.aquaticCreatures = [...this.aquaticCreatures, ...newAquaticCreature];
+    });
+  }
+}
+--------------------------------------------------------------------------------------------------------
+This code is not complete because new data mutates the data observable, so Angular does not run change detection. The solution is to call ChangeDetectorRef’s markForCheck when you subscribe to the observable:
+---------------------------------------------------
+child.component.ts
+-----------------------
+// ...
+ngOnInit() {
+  this.data.subscribe(newAquaticCreature => {
+    this.aquaticCreatures = [...this.aquaticCreatures, ...newAquaticCreature];
+    this.cd.markForCheck();
+  });
+}
+// ...
+-----------------------------------------
+markForCheck instructs Angular that this particular input should trigger change detection when mutated.
+
+ChangeDetectorRef.detach() and ChangeDetectorRef.reattach()
+Yet another powerful thing you can do with ChangeDetectorRef is to completely detach and reattach change detection manually with the detach and reattach methods.
+----------------------------------------------------
+Conclusion
+In this article, you were introduced to ChangeDetectionStrategy and ChangeDetectorRef. By default, Angular will perform change detection on all components. ChangeDetectionStrategy and ChangeDetectorRef can be applied to components to perform change detection on new references versus when data is mutated.
+=====================================================================================================
+
+
+
+
+
